@@ -211,7 +211,7 @@
  */
 
 /** Enable RTT Input support. */
-#define RTT_INPUT_ENABLED 0
+#define RTT_INPUT_ENABLED 1
 
 /** @} end of RTT_INPUT_CONFIG */
 
@@ -222,7 +222,7 @@
  */
 
 /** Enable support for LEDs. */
-#define SIMPLE_HAL_LEDS_ENABLED 0
+#define SIMPLE_HAL_LEDS_ENABLED 1
 
 /** @} end of SIMPLE_HAL_CONFIG */
 

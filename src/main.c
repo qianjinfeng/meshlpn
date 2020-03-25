@@ -39,12 +39,13 @@
 #include <string.h>
 
 /* HAL */
-#include "bsp.h"
 #include "boards.h"
 #include "simple_hal.h"
 #include "app_timer.h"
 
 /* Core */
+#include "nrf_mesh_config_core.h"
+#include "nrf_mesh_gatt.h"
 #include "nrf_mesh_configure.h"
 #include "nrf_mesh.h"
 #include "mesh_stack.h"
@@ -72,11 +73,7 @@
 #include "nrf_mesh_config_examples.h"
 #include "example_common.h"
 #include "ble_softdevice_support.h"
-#include "ble_dfu_support.h"
 
-/* nRF5 SDK */
-#include "nrf_soc.h"
-#include "nrf_pwr_mgmt.h"
 
 /** The maximum duration to scan for incoming Friend Offers. */
 #define FRIEND_REQUEST_TIMEOUT_MS (MESH_LPN_FRIEND_REQUEST_TIMEOUT_MAX_MS)
@@ -97,7 +94,7 @@
 
 static generic_onoff_client_t m_client;
 static bool                   m_device_provisioned;
-static bool                   m_device_state;
+static bool                   m_device_state = false;
 
 /** The timer emulates an occupancy sensor by turning lights off after a certain interval,
  * when no activity is detected. The timer starts after an On State message is sent
@@ -123,9 +120,10 @@ static const generic_onoff_client_callbacks_t client_cbs =
 
 static void device_identification_start_cb(uint8_t attention_duration_s)
 {
+    __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "device_identification_start_cb\n");
 #if SIMPLE_HAL_LEDS_ENABLED
     hal_led_mask_set(LEDS_MASK, false);
-    hal_led_blink_ms(BSP_LED_2_MASK  | BSP_LED_3_MASK,
+    hal_led_blink_ms(LEDS_MASK,
                      LED_BLINK_ATTENTION_INTERVAL_MS,
                      LED_BLINK_ATTENTION_COUNT(attention_duration_s));
 #endif
@@ -133,6 +131,7 @@ static void device_identification_start_cb(uint8_t attention_duration_s)
 
 static void provisioning_aborted_cb(void)
 {
+    __LOG(LOG_SRC_APP, LOG_LEVEL_WARN, "provision aborted\n");
 #if SIMPLE_HAL_LEDS_ENABLED
     hal_led_blink_stop();
 #endif
@@ -239,9 +238,6 @@ static void send_app_state(bool is_state_on)
     switch (status)
     {
         case NRF_SUCCESS:
-#if SIMPLE_HAL_LEDS_ENABLED
-            hal_led_pin_set(BSP_LED_0, set_params.on_off);
-#endif
             break;
 
         case NRF_ERROR_NO_MEM:
@@ -343,47 +339,63 @@ static void button_event_handler(uint32_t button_number)
         return;
     }
 
-    ERROR_CHECK(app_timer_stop(m_state_on_timer));
+//    ERROR_CHECK(app_timer_stop(m_state_on_timer));
 
     switch(button_number)
     {
         case 0:
-            send_app_state(APP_STATE_ON);
-
-            ERROR_CHECK(app_timer_start(m_state_on_timer,
-                                        HAL_MS_TO_RTC_TICKS(APP_STATE_ON_TIMEOUT_MS),
-                                        NULL));
-            break;
-
-        case 1:
-            send_app_state(APP_STATE_OFF);
-            break;
-
-        case 2:
-        {
             if (!mesh_lpn_is_in_friendship())
             {
                 initiate_friendship();
             }
-            else /* In a friendship */
+            else
             {
-                terminate_friendship();
+              if (!m_device_state)
+              {
+                send_app_state(APP_STATE_ON);
+              }
+              else 
+              {
+                send_app_state(APP_STATE_OFF);
+              }
             }
-            break;
-        }
 
-        /* Initiate node reset */
-        case 3:
-        {
-            /* Clear all the states to reset the node. */
-            (void) proxy_stop();
-            mesh_stack_config_clear();
-            node_reset();
+//            ERROR_CHECK(app_timer_start(m_state_on_timer,
+//                                        HAL_MS_TO_RTC_TICKS(APP_STATE_ON_TIMEOUT_MS),
+//                                        NULL));
             break;
-        }
+
+//        case 1:
+//            send_app_state(APP_STATE_OFF);
+//            break;
+//
+//        case 2:
+//        {
+//            if (!mesh_lpn_is_in_friendship())
+//            {
+//                initiate_friendship();
+//            }
+//            else /* In a friendship */
+//            {
+//                terminate_friendship();
+//            }
+//            break;
+//        }
+//
+//        /* Initiate node reset */
+//        case 3:
+//        {
+//            /* Clear all the states to reset the node. */
+//            (void) proxy_stop();
+//            mesh_stack_config_clear();
+//            node_reset();
+//            break;
+//        }
+          default:
+            break;
     }
 }
-#endif
+#else
 /**@brief Function for handling events from the BSP module.
  *
  * @param[in]   event   Event generated when button is pressed.
@@ -397,22 +409,25 @@ static void bsp_event_handler(bsp_event_t event)
         return;
     }
 
-    ERROR_CHECK(app_timer_stop(m_state_on_timer));
     switch (event)
     {
         case BSP_EVENT_KEY_0:
-            if (!m_device_state)
+            if (!mesh_lpn_is_in_friendship())
             {
-              send_app_state(APP_STATE_ON);
-
-              ERROR_CHECK(app_timer_start(m_state_on_timer,
-                                        HAL_MS_TO_RTC_TICKS(APP_STATE_ON_TIMEOUT_MS),
-                                        NULL));
+                initiate_friendship();
             }
-            else 
+            else
             {
-              send_app_state(APP_STATE_OFF);
+              if (!m_device_state)
+              {
+                send_app_state(APP_STATE_ON);
+              }
+              else 
+              {
+                send_app_state(APP_STATE_OFF);
+              }
             }
+            
             break;
 
         case BSP_EVENT_RESET:
@@ -430,6 +445,8 @@ static void bsp_event_handler(bsp_event_t event)
             break;
     }
 }
+#endif
+
 #if RTT_INPUT_ENABLED
 static void rtt_input_handler(int key)
 {
@@ -439,13 +456,12 @@ static void rtt_input_handler(int key)
         button_event_handler(button_number);
     }
 }
-#endif
-
+#else
 static void buttons_leds_init()
 {
     uint32_t err_code;
 
-    err_code = bsp_init(BSP_INIT_BUTTONS, bsp_event_handler);
+    err_code = bsp_init(BSP_INIT_LEDS | BSP_INIT_BUTTONS, bsp_event_handler);
     APP_ERROR_CHECK(err_code);
 
     err_code = bsp_event_to_button_action_assign(0,
@@ -459,7 +475,7 @@ static void buttons_leds_init()
     APP_ERROR_CHECK(err_code);
 
 }
-
+#endif
 static void app_mesh_core_event_cb(const nrf_mesh_evt_t * p_evt)
 {
     /* USER_NOTE: User can insert mesh core event proceesing here */
@@ -521,7 +537,7 @@ static void app_mesh_core_event_cb(const nrf_mesh_evt_t * p_evt)
                   p_est->friend_src);
 
 #if SIMPLE_HAL_LEDS_ENABLED
-            hal_led_pin_set(BSP_LED_1, true);
+            hal_led_pin_set(BSP_LED_0, true);
 #endif
             break;
         }
@@ -536,10 +552,10 @@ static void app_mesh_core_event_cb(const nrf_mesh_evt_t * p_evt)
                   p_term->friend_src, p_term->reason);
 
 #if SIMPLE_HAL_LEDS_ENABLED
-            hal_led_pin_set(BSP_LED_1, false);
+            hal_led_pin_set(BSP_LED_0, false);
 #endif
 
-            ERROR_CHECK(app_timer_stop(m_state_on_timer));
+//            ERROR_CHECK(app_timer_stop(m_state_on_timer));
             break;
         }
 
@@ -554,7 +570,7 @@ static void models_init_cb(void)
 
     m_client.settings.p_callbacks = &client_cbs;
     m_client.settings.timeout = 0;
-    m_client.settings.force_segmented = false;
+    m_client.settings.force_segmented = APP_CONFIG_FORCE_SEGMENTATION;
     m_client.settings.transmic_size = APP_CONFIG_MIC_SIZE;
 
     ERROR_CHECK(generic_onoff_client_init(&m_client, 1));
@@ -605,8 +621,9 @@ static void initialize(void)
 
 #if SIMPLE_HAL_LEDS_ENABLED
     hal_leds_init();
-#endif
+#else
     buttons_leds_init();
+#endif
 
 #if BUTTON_BOARD
     ERROR_CHECK(hal_buttons_init(button_event_handler));
@@ -626,7 +643,6 @@ static void initialize(void)
 #endif
 
     mesh_init();
-    ERROR_CHECK(sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE));
 
     mesh_lpn_init();
 }
@@ -637,8 +653,8 @@ static void start(void)
     rtt_input_enable(rtt_input_handler, RTT_INPUT_POLL_PERIOD_MS);
 #endif
 
-    ERROR_CHECK(app_timer_create(&m_state_on_timer, APP_TIMER_MODE_SINGLE_SHOT,
-                                 state_on_timer_handler));
+//    ERROR_CHECK(app_timer_create(&m_state_on_timer, APP_TIMER_MODE_SINGLE_SHOT,
+//                                 state_on_timer_handler));
 
     if (!m_device_provisioned)
     {

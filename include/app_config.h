@@ -46,6 +46,9 @@
  * @{
  */
 
+/** Controls if the model instance should force all mesh messages to be segmented messages. */
+#define APP_CONFIG_FORCE_SEGMENTATION  (false)
+
 /** Controls the MIC size used by the model instance for sending the mesh messages. */
 #define APP_CONFIG_MIC_SIZE            (NRF_MESH_TRANSMIC_SIZE_SMALL)
 
@@ -81,19 +84,19 @@
 #define APP_TIMER_CONFIG_RTC_FREQUENCY  0
 
 /** Configuration for the BLE DFU support module to be enabled. */
-#define FDS_ENABLED 1
-#define NRF_BLE_GATT_ENABLED 1
-#define NRF_DFU_BLE_BUTTONLESS_SUPPORTS_BONDS 0
-#define NRF_DFU_TRANSPORT_BLE 1
-#define NRF_FSTORAGE_ENABLED 1
-#define NRF_PWR_MGMT_ENABLED 1
-#define NRF_PWR_MGMT_CONFIG_AUTO_SHUTDOWN_RETRY 1
-#define NRF_SDH_BLE_SERVICE_CHANGED 1
-#define NRF_SDH_BLE_VS_UUID_COUNT 1
-#define PEER_MANAGER_ENABLED 1
-#define PM_CENTRAL_ENABLED 0
-#define NRFX_POWER_ENABLED 0
-#define POWER_ENABLED 0
+//#define FDS_ENABLED 1
+//#define NRF_BLE_GATT_ENABLED 1
+//#define NRF_DFU_BLE_BUTTONLESS_SUPPORTS_BONDS 0
+//#define NRF_DFU_TRANSPORT_BLE 1
+//#define NRF_FSTORAGE_ENABLED 1
+//#define NRF_PWR_MGMT_ENABLED 1
+//#define NRF_PWR_MGMT_CONFIG_AUTO_SHUTDOWN_RETRY 1
+//#define NRF_SDH_BLE_SERVICE_CHANGED 1
+//#define NRF_SDH_BLE_VS_UUID_COUNT 1
+//#define PEER_MANAGER_ENABLED 1
+//#define PM_CENTRAL_ENABLED 0
+//#define NRFX_POWER_ENABLED 0
+//#define POWER_ENABLED 0
 
 /** @} end of APP_SDK_CONFIG */
 
