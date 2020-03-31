@@ -1,216 +1,131 @@
-# Low Power node example (experimental)
+# Configuring DFU over BLE using the LPN example
 
-@tag52810nosupport
+Device Firmware Upgrade (DFU) over BLE is the process that provides ability to update the application,
+SoftDevice, and bootloader through BLE.
 
-This example shows the implementation of a device supporting the Low Power node (LPN) feature. It
-emulates an occupancy sensor device through button presses and a timer.
-
-You can use this example as the starting point for adding the LPN feature to your device,
-as it demonstrates all the required changes to the application. Read more about the Low Power Node feature
-in @ref md_doc_introduction_lpn_concept.
-
-When configured to interact with a device with a Generic OnOff Server model, the device running
-this example turns on the LED on the light switch server device upon a button press, which emulates
-triggering the occupancy sensor. It also sends an off message to the light switch server device after
-five seconds to emulate inactivity.
-
-This example uses [GATT provisioning](@ref md_doc_getting_started_provisioning_gatt_proxy),
-and instantiates a [Generic OnOff Client model](@ref GENERIC_ONOFF_CLIENT) that can be used
-to control light switch servers.
-
-This example also supports the @link_buttonless_secure_dfu_service to perform Device Firmware Upgrade
-over BLE. The DFU over BLE is disabled by default. See @link_bootloader_and_dfu_modules for more information.
 
 **Table of contents**
-- [Hardware requirements](@ref examples_lpn_requirements_hw)
-- [Software requirements](@ref examples_lpn_requirements_sw)
-- [Setup](@ref examples_lpn_setup)
-        - [LED and button assignments](@ref examples_lpn_setup_buttons)
-- [Testing the example](@ref examples_lpn_running)
-        - [Building and flashing](@ref examples_lpn_initial_building)
-        - [Provisioning and configuration](@ref examples_lpn_running_provisioning)
-        - [Establishing the friendship](@ref examples_lpn_running_friendship)
-        - [Sending messages](@ref examples_lpn_running_sending)
-        - [Updating the LPN node firmware through DFU over BLE](@ref examples_lpn_perform_dfu)
-        - [Resetting the device](@ref examples_lpn_running_resetting)
+- [Hardware requirements](@ref examples_lpn_dfu_ble_requirements_hw)
+- [Software requirements](@ref examples_lpn_dfu_ble_requirements_sw)
+- [Setup](@ref examples_lpn_dfu_ble_setup)
+- [Configuring DFU over BLE](@ref examples_lpn_dfu_ble_configure)
+    - [Creating signature for the Low Power node example](@ref examples_lpn_dfu_ble_create_signature)
+    - [Generating a firmware package with the Low Power node example](@ref examples_lpn_dfu_ble_generate_dfu_package)
+    - [Building and programming the bootloader](@ref examples_lpn_dfu_ble_program_bootloader)
+    - [Performing DFU over BLE](@ref examples_lpn_dfu_ble_perform_dfu)
 
 
 ---
 
-## Hardware requirements @anchor examples_lpn_requirements_hw
+## Hardware requirements @anchor examples_lpn_dfu_ble_requirements_hw
 
-Running this example requires three PCA10040 Development Kits:
-- One development kit for the LPN device running the Low Power Node example.
-- Two development kits for the light switch server device running the
-[light switch server example](@ref light_switch_demo_server), which also includes a friend functionality.
+Taobao nRF52832 one button, one led
+
+---
+
+## Software requirements @anchor examples_lpn_dfu_ble_requirements_sw
+
+Install the following additional tools:
+- @link_ic_nrfutil for generating the application signature and the firmware package. See @link_nrfutil_installing
+for details.
+- Depending on whether you want to perform DFU using mobile or PC:
+    - @link_nRFConnectMobile (@link_nrf_connect_mobile_ios or @link_nrf_connect_mobile_android) for performing DFU using a mobile phone.
 
 
 ---
 
-## Software requirements @anchor examples_lpn_requirements_sw
+## Setup @anchor examples_lpn_dfu_ble_setup
 
-An experimental Friend feature is supported by this version of the nRF5 SDK for Mesh and it is enabled
-in the light switch server example.
+The nRF5 SDK project files for the DFU over BLE can be found at: `<the path to nRF5 SDK instance>/examples/dfu`.
 
-You can find the light switch server example files in the following folder: `<InstallFolder>/examples/light_switch/server`
+You can find the source code of the Secure Bootloader example at: `<path to nRF5 SDK instance>/examples/dfu/secure_bootloader`.
 
-You also need to download and install
-@link_nrf_mesh_app (available for @link_nrf_mesh_app_ios and @link_nrf_mesh_app_android)
-for [Provisioning and configuration](@ref examples_lpn_running_provisioning).
-
----
-
-## Setup @anchor examples_lpn_setup
-
-You can find the source code and the project file of the example in the following folder:
-`<InstallFolder>/examples/experimental_lpn`
-
-### LED and button assignments @anchor examples_lpn_setup_buttons
-
-These assignments refer to the LPN device only.
-
-- LEDs
-    - LED 1: Reacts to pressing button 1 (turns on) and button 2 (turns off). Can be off for other reasons,
-    for example when joining the network.
-    - LED 2: Friendship established.
-    - LED 3 and 4 blinking: Device identification active.
-    - All LEDs blinking four times: Provisioning complete.
-    - All LEDs flashing instensively: An error occurred. See the RTT log for details.
-- Buttons
-    - Button 1: Send the on message.
-    - Button 2: Send the off message.
-    - Button 3: Establish or terminate friendship.
-    - Button 4: Reset the device (erase all mesh data).
-
+The LPN device uses [PCA10040 Development Kit](@ref examples_lpn_requirements_hw).
+ You can find the Secure Bootloader project files for this board in the `.../pca10040_ble` folder. 
+ 
+ **Change BOARD_PCA10040 to BOARD_NRF52832_TB**
+ **add boards.h and nrf52832_tb.h into `<path to nRF5 SDK instance>/components/boards/`**
 
 ---
 
-## Testing the example @anchor examples_lpn_running
 
-To send messages between the LPN device and the light switch server device, complete the following steps:
-- [Building and flashing](@ref examples_lpn_initial_building)
-- [Provisioning and configuration](@ref examples_lpn_running_provisioning)
-- [Establishing the friendship](@ref examples_lpn_running_friendship)
-- [Sending messages](@ref examples_lpn_running_sending)
-- [Updating the Low Power node example through DFU over BLE](@ref examples_lpn_perform_dfu)
-- [Resetting the device](@ref examples_lpn_running_resetting)
+## Configuring DFU over BLE @anchor examples_lpn_dfu_ble_configure
 
 
-### Building and flashing @anchor examples_lpn_initial_building
+### Creating signature for the Low Power node example @anchor examples_lpn_dfu_ble_create_signature
 
-To set up the example:
-1. Decide about the Device Firmware Upgrade approach for the Low Power node:
-    - Use the standard setting (Device Firmware Upgrade over BLE disabled by default).
-        1. Build the Low Power node example. To build the example, follow the instructions in
-        [Building the mesh stack](@ref md_doc_getting_started_how_to_build).
-        2. Program the Low Power node example onto one development kit.
-        See @ref md_doc_getting_started_how_to_run_examples for the instructions.
-    - Use the node with DFU over BLE:
-        - Follow the instructions on the @subpage md_examples_experimental_lpn_dfu_ble page and program
-        the example onto one development kit.
-2. Build the Light switch server example. To build the example, follow the instructions
-in [Building the mesh stack](@ref md_doc_getting_started_how_to_build).
-3. Program the Light Switch Server example onto two development kits.
-See @ref md_doc_getting_started_how_to_run_examples for the instructions.
-
-All three devices are now running Bluetooth Mesh enabled firmware.
-
-@note When building and running the firmware, you might encounter the following error:
+To create the keys required for the DFU process:  
+0. install nrfutil:
 ```
-app_error_weak.c, 119, Mesh error 4 at 0x00000000
+pip install nrfutil
 ```
-This error means that the bootloader is not flashed. Go to 
-[Building and programming the bootloader](@ref examples_lpn_dfu_ble_program_bootloader)
-to flash the bootloader.
-
-### Provisioning and configuration @anchor examples_lpn_running_provisioning
-
-Before a friendship can be established between the LPN device and the Friend device,
-they both must be provisioned to the same mesh network.
-
-As the Low Power node example only supports the PB-GATT bearer for provisioning, use @link_nrf_mesh_app
-(for @link_nrf_mesh_app_ios or @link_nrf_mesh_app_android) to provision and configure
-all three devices. See @ref nrf-mesh-mobile-app "the information on the main Examples page" for detailed steps.
-
-The following naming convention is used in the app:
-- Each server board is `nRF5x Mesh Light`.
-- The LPN device client board is `nRF5x Mesh LPN`.
-
-The following model instances must be configured in the app for this example:
-- For the `nRF5x Mesh Light` server boards: Generic On Off Server.
-- For the `nRF5x Mesh LPN` client board: Generic On Off Client.
-
-When [setting publication with nRF Mesh](@ref nrf-mesh-mobile-app-publication), use the following procedure specific to the LPN example:
-1. On `nRF5x Mesh LPN`, in the publication section of the Generic On Off Client model instance menu, tap **Set Publication**.
-2. Tap the publication address field. A dropdown menu appears.
-3. Set the publication to a group address:
-    1. Select an existing group to subscribe or create a new one.
-    2. Apply the changes for the client node.
-    3. On the server nodes, set the Subscription Address of the Generic On Off Server model instance menu to the selected group address.
-    4. Apply the changes for the server nodes.
-4. On `nRF5x Mesh Light`, in the publication section of the Generic On Off Server model instance menu, tap **Set Publication**.
-5. Tap the publication address field. A dropdown menu appears.
-6. Set the publication to a unicast address of the `nRF5x Mesh LPN` node.
-
-At the end of the configuration process:
-- The light switch servers are part of the mesh network, and are ready to receive messages from the LPN device.
-- The LPN device is part of the mesh network and can control the LEDs of the light switch server device.
-It has not entered the low power mode yet, as the friendship is not established.
-- After assigning the addresses of the server nodes to the client, you can see the messages received from the servers in the RTT log of the LPN device.
-
-
-### Establishing the friendship @anchor examples_lpn_running_friendship
-
-After the initial configuration and provisioning are complete, the LPN device enters the idle state.
-
-To start the friendship establishment process, press button 3 on the LPN device. The device starts
-searching for an appropriate Friend in the mesh network.
-
-The LPN example always accepts the first friendship it is offered with.
-Establishing a friendship normally takes less than a second. If the LPN device cannot find a
-Friend after 5-10 seconds, all LEDs will blink intensively. You have to press button 3 again
-to retry.
-
-Once the friendship is established, LED 2 turns on and stays lit throughout the friendship.
-
-@note Pressing button 3 again while the LPN is in a friendship causes it to terminate the friendship
-and go back to the normal power mode.
-
-
-### Sending messages @anchor examples_lpn_running_sending
-
-You can send on and off messages by pressing buttons 1 and 2, respectively.
-These buttons also control the LED 1 of the light switch server through the Generic OnOff client model.
-
-- Pressing button 1 turns on the LED 1 on the LPN device and sends message to the light switch servers.
-This message turns on the LED 1 on both of the light switch servers.
-- Pressing button 2 turns off the LED 1 on the LPN device and sends message to the light switch server.
-This message turns off the LED 1 on both of the light switch servers.
-
-This behavior is identical to the one in the [light switch client](@ref light_switch_demo_client) example.
-
-If you connect the RTT viewer to the LPN device, you will see the status messages being received from
-the servers through the Friend node.
-
-
-### Updating the LPN node firmware through DFU over BLE @anchor examples_lpn_perform_dfu
-
-@note Skip this section if you decided to use the node without DFU over BLE.
-
-When the Low Power node is running, you can update it using DFU over BLE:
-1. Add any changes to the Low Power node example, for example change the log message
-in the `initialize()`function to the following:
+1. Create a private key:
 ```
-__LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "----- BLE Mesh LPN Demo (Updated) -----\n");
+nrfutil keys generate lpn_private_key.pem
 ```
-2. Rebuild the Low Power node example.
-3. Create a new firmware package with the modified Low Power node example.
-Refer to [Generating a firmware package with the Low Power node example](@ref examples_lpn_dfu_ble_generate_dfu_package) section
-of the @ref md_examples_experimental_lpn_dfu_ble page to create a new firmware package.
-4. Upload the new firmware package to the LPN device. Refer to [Performing DFU over BLE](@ref examples_lpn_dfu_ble_perform_dfu) section
-of the @ref md_examples_experimental_lpn_dfu_ble page to upload the new firmware package.
-5. Verify that the new firmware is uploaded be checking the RTT log.
+2. Create a public key in code format and store it in a file named `dfu_public_key.c`:
+```
+nrfutil keys display --key pk --format code lpn_private_key.pem --out_file dfu_public_key.c
+```
+3. Replace `dfu_public_key.c` file in the `<the path to nRF5 SDK instance>/examples/dfu` folder with the new one.
 
-### Resetting the device @anchor examples_lpn_running_resetting
+@note See @link_working_with_keys and @link_bootloader_signature_verification for more information about signatures.
 
-Pressing button 4 resets and unprovisions the LPN device.
+### Generating a firmware package with the Low Power node example @anchor examples_lpn_dfu_ble_generate_dfu_package
+
+To generate a firmware package:
+1. Make sure the DFU over BLE support is enabled (@ref BLE_DFU_SUPPORT_ENABLED is set to 1
+in examples/experimental_lpn/include/app_config.h).
+2. Build the Low Power node example. To build the example, follow the instructions in
+[Building the mesh stack](@ref md_doc_getting_started_how_to_build).
+3. Generate a firmware package with the Low Power node example by using the
+Low Power node hex file and the private key generated when building the example:
+```
+nrfutil pkg generate --application <path-to-lpn-example-hex-file> --application-version <application-version> --hw-version 52 --sd-req 0xCB --key-file lpn_private_key.pem lpn_dfu_package.zip
+```
+    In this command:
+        - Replace `<path-to-lpn-example-hex-file>` with the path to the LPN example HEX file and the file name.
+        - Replace `<application-version>` with any positive number.
+            - After the first time upgrade, make sure that each next update has the application version number greater than the current.
+        - `--sd-req` can be obtained with the following command:
+```
+nrfutil pkg generate --help
+```
+
+
+### Building and programming the bootloader @anchor examples_lpn_dfu_ble_program_bootloader
+
+To perform DFU over BLE update for the Low Power node example, you must build and program the @link_secure_bootloader.  
+**Use Segger emProject instead, bootloader setting is optional**
+
+
+**Programming**<br>
+To program the bootloader:
+1. You can use one of the following options:
+    - Program using SES: Follow the [Running examples using SEGGER Embedded Studio](@ref how_to_run_examples_ses)
+    instruction.
+2. Observe LED on the device. 
+
+### Performing DFU over BLE @anchor examples_lpn_dfu_ble_perform_dfu
+
+The Device Firmware Upgrade over BLE can be performed using either a mobile phone or PC.
+
+**Mobile**<br>
+To perform the DFU transfer over BLE using a mobile phone:
+1. Copy the generated `lpn_dfu_package.zip` firmware package to your mobile phone.
+2. Use @link_nRFConnectMobile to scan for a target device and connect to it:
+    - If the DFU is performed for the first time, the device will show up as "DfuTarget".
+    - If the Low Power node example application is already programmed, the device will show up as "nRF5x Mesh LPN Switch".
+3. Press the DFU button to perform DFU.
+4. Provide the zip archive of the application when prompted.
+
+
+---
+
+## Usage
+Click button to trigger friendship invitation
+LED off when invitation is succesfully established 
+
+### Serial output
+JLinkExe -device nRF52 -speed 4000 -if SWD     in one terminal
+JLinkRTTClient               in another terminal
