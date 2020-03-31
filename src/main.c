@@ -73,7 +73,11 @@
 #include "nrf_mesh_config_examples.h"
 #include "example_common.h"
 #include "ble_softdevice_support.h"
+#include "ble_dfu_support.h"
 
+/* nRF5 SDK */
+#include "nrf_soc.h"
+#include "nrf_pwr_mgmt.h"
 
 /** The maximum duration to scan for incoming Friend Offers. */
 #define FRIEND_REQUEST_TIMEOUT_MS (MESH_LPN_FRIEND_REQUEST_TIMEOUT_MAX_MS)
@@ -643,6 +647,7 @@ static void initialize(void)
 #endif
 
     mesh_init();
+    ERROR_CHECK(sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE));
 
     mesh_lpn_init();
 }

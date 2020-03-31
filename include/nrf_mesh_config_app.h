@@ -283,7 +283,7 @@
  */
 
 /** Enable BLE DFU support module. */
-#define BLE_DFU_SUPPORT_ENABLED 0
+#define BLE_DFU_SUPPORT_ENABLED 1
 
 /** @} end of DFU_SUPPORT_CONFIG */
 

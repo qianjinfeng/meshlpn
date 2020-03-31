@@ -60,8 +60,10 @@ The nRF5 SDK project files for the DFU over BLE can be found at: `<the path to n
 You can find the source code of the Secure Bootloader example at: `<path to nRF5 SDK instance>/examples/dfu/secure_bootloader`.
 
 The LPN device uses [PCA10040 Development Kit](@ref examples_lpn_requirements_hw).
- You can find the Secure Bootloader project files for this board in the `.../pca10040_ble` folder.
-
+ You can find the Secure Bootloader project files for this board in the `.../pca10040_ble` folder. 
+ 
+ **Change BOARD_PCA10040 to BOARD_NRF52832_TB**
+ **add boards.h and nrf52832_tb.h into `<path to nRF5 SDK instance>/components/boards/`**
 
 ---
 
@@ -87,7 +89,11 @@ be used by the bootloader when the DFU is performed.
 
 ### Creating signature for the Low Power node example @anchor examples_lpn_dfu_ble_create_signature
 
-To create the keys required for the DFU process:
+To create the keys required for the DFU process:  
+0. install nrfutil:
+```
+pip install nrfutil
+```
 1. Create a private key:
 ```
 nrfutil keys generate lpn_private_key.pem
@@ -125,7 +131,8 @@ nrfutil pkg generate --help
 
 ### Building and programming the bootloader @anchor examples_lpn_dfu_ble_program_bootloader
 
-To perform DFU over BLE update for the Low Power node example, you must build and program the @link_secure_bootloader.
+To perform DFU over BLE update for the Low Power node example, you must build and program the @link_secure_bootloader.  
+**Use Segger emProject instead, bootloader setting is optional**
 
 **Building**<br>
 To build the bootloader:
