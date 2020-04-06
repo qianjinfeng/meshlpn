@@ -63,6 +63,7 @@
 
 /* Models */
 #include "generic_onoff_client.h"
+#include "generic_battery_server.h"
 
 /* Logging and RTT */
 #include "log.h"
@@ -78,6 +79,8 @@
 /* nRF5 SDK */
 #include "nrf_soc.h"
 #include "nrf_pwr_mgmt.h"
+
+#include "nrf_drv_saadc.h"
 
 /** The maximum duration to scan for incoming Friend Offers. */
 #define FRIEND_REQUEST_TIMEOUT_MS (MESH_LPN_FRIEND_REQUEST_TIMEOUT_MAX_MS)
@@ -96,7 +99,23 @@
 #define STATIC_AUTH_DATA                {0x6E, 0x6F, 0x72, 0x64, 0x69, 0x63, 0x5F, 0x65, \
                                          0x78, 0x61, 0x6D, 0x70, 0x6C, 0x65, 0x5F, 0x31}
 
+#define ADC_REF_VOLTAGE_IN_MILLIVOLTS   600                                     /**< Reference voltage (in milli volts) used by ADC while doing conversion. */
+#define ADC_PRE_SCALING_COMPENSATION    6                                       /**< The ADC is configured to use VDD with 1/3 prescaling as input. And hence the result of conversion is to be multiplied by 3 to get the actual value of the battery voltage.*/
+#define DIODE_FWD_VOLT_DROP_MILLIVOLTS  270                                     /**< Typical forward voltage drop of the diode . */
+#define ADC_RES_10BIT                   1024                                    /**< Maximum digital value for 10-bit ADC conversion. */
+/**@brief Macro to convert the result of ADC conversion in millivolts.
+ *
+ * @param[in]  ADC_VALUE   ADC result.
+ *
+ * @retval     Result converted to millivolts.
+ */
+#define ADC_RESULT_IN_MILLI_VOLTS(ADC_VALUE)\
+        ((((ADC_VALUE) * ADC_REF_VOLTAGE_IN_MILLIVOLTS) / ADC_RES_10BIT) * ADC_PRE_SCALING_COMPENSATION)
+
 static generic_onoff_client_t m_client;
+static generic_battery_server_t m_battery_server;
+static nrf_saadc_value_t adc_buf[2];
+static uint8_t           m_percentage_batt_lvl;
 static bool                   m_device_provisioned;
 static bool                   m_device_state = false;
 
@@ -104,12 +123,17 @@ static bool                   m_device_state = false;
  * when no activity is detected. The timer starts after an On State message is sent
  * and sends an Off State message after the timeout @ref APP_STATE_ON_TIMEOUT_MS. */
 APP_TIMER_DEF(m_state_on_timer);
+APP_TIMER_DEF(m_battery_timer_id);
 
 /* Forward declaration */
 static void app_gen_onoff_client_publish_interval_cb(access_model_handle_t handle, void * p_self);
 static void app_generic_onoff_client_status_cb(const generic_onoff_client_t * p_self,
                                                const access_message_rx_meta_t * p_meta,
                                                const generic_onoff_status_params_t * p_in);
+
+static void app_generic_battery_state_get_cb(const generic_battery_server_t * p_self,
+                                               const access_message_rx_meta_t * p_meta,
+                                               generic_battery_status_params_t * p_out);
 static void app_mesh_core_event_cb (const nrf_mesh_evt_t * p_evt);
 static void send_app_state(bool is_state_on);
 
@@ -186,6 +210,48 @@ static void app_generic_onoff_client_status_cb(const generic_onoff_client_t * p_
         __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "OnOff server: 0x%04x, Present OnOff: %d\n",
               p_meta->src.value, p_in->present_on_off);
         m_device_state = p_in->present_on_off;
+    }
+}
+/* This callback is called */
+static void app_generic_battery_state_get_cb(const generic_battery_server_t * p_self,
+                                               const access_message_rx_meta_t * p_meta,
+                                               generic_battery_status_params_t * p_out)
+{
+    __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "battery get message here.\n");
+    p_out->battery_level = m_percentage_batt_lvl;
+    p_out->flags = 0;
+}
+
+
+
+/**@brief Function for handling the ADC interrupt.
+ *
+ * @details  This function will fetch the conversion result from the ADC, convert the value into
+ *           percentage and send it to peer.
+ */
+void saadc_event_handler(nrf_drv_saadc_evt_t const * p_event)
+{
+    __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "SAADC event entered");
+    if (p_event->type == NRF_DRV_SAADC_EVT_DONE)
+    {
+        nrf_saadc_value_t adc_result;
+        uint16_t          batt_lvl_in_milli_volts;
+        uint32_t          err_code;
+
+        adc_result = p_event->data.done.p_buffer[0];
+
+        err_code = nrf_drv_saadc_buffer_convert(p_event->data.done.p_buffer, 1);
+        APP_ERROR_CHECK(err_code);
+
+        batt_lvl_in_milli_volts = ADC_RESULT_IN_MILLI_VOLTS(adc_result) +
+                                  DIODE_FWD_VOLT_DROP_MILLIVOLTS;
+        m_percentage_batt_lvl = battery_level_in_percent(batt_lvl_in_milli_volts);
+        __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "SAADC event: battery level %d\n", m_percentage_batt_lvl);
+        generic_battery_status_params_t status = {
+            .battery_level = m_percentage_batt_lvl,
+            .flags = 0
+        };
+        generic_battery_server_status_publish(&m_battery_server, &status);
     }
 }
 
@@ -368,33 +434,6 @@ static void button_event_handler(uint32_t button_number)
 //                                        HAL_MS_TO_RTC_TICKS(APP_STATE_ON_TIMEOUT_MS),
 //                                        NULL));
             break;
-
-//        case 1:
-//            send_app_state(APP_STATE_OFF);
-//            break;
-//
-//        case 2:
-//        {
-//            if (!mesh_lpn_is_in_friendship())
-//            {
-//                initiate_friendship();
-//            }
-//            else /* In a friendship */
-//            {
-//                terminate_friendship();
-//            }
-//            break;
-//        }
-//
-//        /* Initiate node reset */
-//        case 3:
-//        {
-//            /* Clear all the states to reset the node. */
-//            (void) proxy_stop();
-//            mesh_stack_config_clear();
-//            node_reset();
-//            break;
-//        }
           default:
             break;
     }
@@ -578,6 +617,68 @@ static void models_init_cb(void)
     m_client.settings.transmic_size = APP_CONFIG_MIC_SIZE;
 
     ERROR_CHECK(generic_onoff_client_init(&m_client, 1));
+
+    m_battery_server.settings.p_get_cb = app_generic_battery_state_get_cb;
+    m_battery_server.settings.force_segmented = APP_CONFIG_FORCE_SEGMENTATION;
+    m_battery_server.settings.transmic_size = APP_CONFIG_MIC_SIZE;
+
+    ERROR_CHECK(generic_battery_server_init(&m_battery_server, 1));
+}
+
+/**@brief Function for configuring ADC to do battery level conversion.
+ */
+static void adc_configure(void)
+{
+    ret_code_t err_code = nrf_drv_saadc_init(NULL, saadc_event_handler);
+    ERROR_CHECK(err_code);
+
+    nrf_saadc_channel_config_t config =
+        NRF_DRV_SAADC_DEFAULT_CHANNEL_CONFIG_SE(NRF_SAADC_INPUT_VDD);
+    err_code = nrf_drv_saadc_channel_init(0, &config);
+    ERROR_CHECK(err_code);
+
+    err_code = nrf_drv_saadc_buffer_convert(&adc_buf[0], 1);
+    ERROR_CHECK(err_code);
+
+    err_code = nrf_drv_saadc_buffer_convert(&adc_buf[1], 1);
+    ERROR_CHECK(err_code);
+
+    err_code = nrf_drv_saadc_sample();
+    ERROR_CHECK(err_code);
+}
+
+
+/**@brief Function for handling the Battery measurement timer timeout.
+ *
+ * @details This function will be called each time the battery level measurement timer expires.
+ *          This function will start the ADC.
+ *
+ * @param[in] p_context   Pointer used for passing some arbitrary information (context) from the
+ *                        app_start_timer() call to the timeout handler.
+ */
+static void battery_level_meas_timeout_handler(void * p_context)
+{
+    UNUSED_PARAMETER(p_context);
+
+    ret_code_t err_code;
+    err_code = nrf_drv_saadc_sample();
+    ERROR_CHECK(err_code);
+}
+
+
+/**@brief Function for the Timer initialization.
+ *
+ * @details Initializes the timer module. This creates and starts application timers.
+ */
+static void timers_init(void)
+{
+    ret_code_t err_code;
+
+    // Create battery timer.
+    err_code = app_timer_create(&m_battery_timer_id,
+                                APP_TIMER_MODE_REPEATED,
+                                battery_level_meas_timeout_handler);
+    ERROR_CHECK(err_code);
 }
 
 static void mesh_init(void)
@@ -658,6 +759,8 @@ static void start(void)
     rtt_input_enable(rtt_input_handler, RTT_INPUT_POLL_PERIOD_MS);
 #endif
 
+    timers_init();
+    adc_configure();
 //    ERROR_CHECK(app_timer_create(&m_state_on_timer, APP_TIMER_MODE_SINGLE_SHOT,
 //                                 state_on_timer_handler));
 
