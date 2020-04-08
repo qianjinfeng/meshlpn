@@ -129,3 +129,17 @@ LED off when invitation is succesfully established
 ### Serial output
 JLinkExe -device nRF52 -speed 4000 -if SWD     in one terminal
 JLinkRTTClient               in another terminal
+
+
+nrfutil settings generate --family NRF52 --application _build/ruuvi_firmware.hex --application-version 1 --bootloader-version 1 --bl-settings-version 1 settings.hex
+mergehex -m ~/git/s132_nrf52_3.1.0_softdevice.hex ~/git/ruuvitag_b_bootloader_1.0.0.hex settings.hex -o sbc.hex
+mergehex -m sbc.hex _build/ruuvi_firmware.hex -o packet.hex
+nrfjprog --family nrf52 --eraseall
+nrfjprog --family nrf52 --program packet.hex
+nrfjprog --family nrf52 --reset
+
+or 
+nrfjprog --family nrf52 --eraseall
+nrfjprog --family nrf52 --program latest_softdevice.hex
+nrfjprog --family nrf52 --program latest_bootloader.hex
+nrfutil pkg generate --debug-mode --application _build/ruuvi_firmware.hex --hw-version 3 --sd-req 0x91 --key-file ~/git/ruuvitag_fw/keys/ruuvi_open_private.pem ruuvi_firmware_dfu.zip

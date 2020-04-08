@@ -92,7 +92,7 @@
  */
 #define ACCESS_MODEL_COUNT (1 + /* Configuration server */  \
                             1 + /* Health server */  \
-                            2   /* Generic OnOff clients */)
+                            3   /* Generic OnOff clients */ )
 
 /**
  * The number of elements in the application.
@@ -200,7 +200,7 @@
  */
 
 /** Enable Advertising-based provisioning bearer, PB-ADV. */
-#define MESH_FEATURE_PB_ADV_ENABLED 0
+#define MESH_FEATURE_PB_ADV_ENABLED 1
 
 /** @} end of NRF_MESH_PROVISIONEE_CONFIG */
 
@@ -283,7 +283,7 @@
  */
 
 /** Enable BLE DFU support module. */
-#define BLE_DFU_SUPPORT_ENABLED 1
+#define BLE_DFU_SUPPORT_ENABLED 0
 
 /** @} end of DFU_SUPPORT_CONFIG */
 

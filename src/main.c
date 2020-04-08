@@ -64,6 +64,7 @@
 /* Models */
 #include "generic_onoff_client.h"
 #include "generic_battery_server.h"
+#include "ali_but_server.h"
 
 /* Logging and RTT */
 #include "log.h"
@@ -80,7 +81,10 @@
 #include "nrf_soc.h"
 #include "nrf_pwr_mgmt.h"
 
+#include "nrf_twi_mngr.h"
 #include "nrf_drv_saadc.h"
+
+#include "sht3x.h"
 
 /** The maximum duration to scan for incoming Friend Offers. */
 #define FRIEND_REQUEST_TIMEOUT_MS (MESH_LPN_FRIEND_REQUEST_TIMEOUT_MAX_MS)
@@ -99,6 +103,10 @@
 #define STATIC_AUTH_DATA                {0x6E, 0x6F, 0x72, 0x64, 0x69, 0x63, 0x5F, 0x65, \
                                          0x78, 0x61, 0x6D, 0x70, 0x6C, 0x65, 0x5F, 0x31}
 
+#define TWI_INSTANCE_ID             0
+#define MAX_PENDING_TRANSACTIONS    5
+NRF_TWI_MNGR_DEF(m_nrf_twi_mngr, MAX_PENDING_TRANSACTIONS, TWI_INSTANCE_ID);
+
 #define ADC_REF_VOLTAGE_IN_MILLIVOLTS   600                                     /**< Reference voltage (in milli volts) used by ADC while doing conversion. */
 #define ADC_PRE_SCALING_COMPENSATION    6                                       /**< The ADC is configured to use VDD with 1/3 prescaling as input. And hence the result of conversion is to be multiplied by 3 to get the actual value of the battery voltage.*/
 #define DIODE_FWD_VOLT_DROP_MILLIVOLTS  270                                     /**< Typical forward voltage drop of the diode . */
@@ -112,6 +120,7 @@
 #define ADC_RESULT_IN_MILLI_VOLTS(ADC_VALUE)\
         ((((ADC_VALUE) * ADC_REF_VOLTAGE_IN_MILLIVOLTS) / ADC_RES_10BIT) * ADC_PRE_SCALING_COMPENSATION)
 
+static ali_but_server_t m_alibutton;
 static generic_onoff_client_t m_client;
 static generic_battery_server_t m_battery_server;
 static nrf_saadc_value_t adc_buf[2];
@@ -134,6 +143,8 @@ static void app_generic_onoff_client_status_cb(const generic_onoff_client_t * p_
 static void app_generic_battery_state_get_cb(const generic_battery_server_t * p_self,
                                                const access_message_rx_meta_t * p_meta,
                                                generic_battery_status_params_t * p_out);
+static uint16_t app_ali_but_get_cb(const ali_but_server_t * p_self);
+                             
 static void app_mesh_core_event_cb (const nrf_mesh_evt_t * p_evt);
 static void send_app_state(bool is_state_on);
 
@@ -222,7 +233,11 @@ static void app_generic_battery_state_get_cb(const generic_battery_server_t * p_
     p_out->flags = 0;
 }
 
-
+static uint16_t app_ali_but_get_cb(const ali_but_server_t * p_self)
+{
+    __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "ali button get message here.\n");
+    return 0;
+}
 
 /**@brief Function for handling the ADC interrupt.
  *
@@ -280,6 +295,19 @@ static void config_server_evt_cb(const config_server_evt_t * p_evt)
     if (p_evt->type == CONFIG_SERVER_EVT_NODE_RESET)
     {
         node_reset();
+    }
+    else if (p_evt->type == CONFIG_SERVER_EVT_MODEL_APP_BIND)
+    {
+      __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "----- Model app bind  -----\n");
+      __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "----- 0x%04x\n", p_evt->params.model_app_bind.appkey_handle);
+    }
+    else if (p_evt->type == CONFIG_SERVER_EVT_APPKEY_ADD)
+    {
+      __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "----- app key add  -----\n");
+    }
+    else if (p_evt->type == CONFIG_SERVER_EVT_MODEL_PUBLICATION_SET)
+    {
+      __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "----- publication set  -----\n");
     }
 }
 
@@ -623,6 +651,26 @@ static void models_init_cb(void)
     m_battery_server.settings.transmic_size = APP_CONFIG_MIC_SIZE;
 
     ERROR_CHECK(generic_battery_server_init(&m_battery_server, 1));
+
+    m_alibutton.get_cb = app_ali_but_get_cb;
+    ERROR_CHECK(ali_but_server_init(&m_alibutton, 1));
+}
+
+// TWI (with transaction manager) initialization.
+static void twi_config(void)
+{
+    uint32_t err_code;
+
+    nrf_drv_twi_config_t const config = {
+       .scl                = ARDUINO_SCL_PIN,
+       .sda                = ARDUINO_SDA_PIN,
+       .frequency          = NRF_DRV_TWI_FREQ_100K,
+       .interrupt_priority = APP_IRQ_PRIORITY_LOWEST,
+       .clear_bus_init     = false
+    };
+
+    err_code = nrf_twi_mngr_init(&m_nrf_twi_mngr, &config);
+    ERROR_CHECK(err_code);
 }
 
 /**@brief Function for configuring ADC to do battery level conversion.
@@ -709,13 +757,14 @@ static void mesh_init(void)
 }
 
 #if BLE_DFU_SUPPORT_ENABLED
+#endif
 /** Initializes Power Management. Required for BLE DFU. */
 static void power_management_init(void)
 {
     uint32_t err_code = nrf_pwr_mgmt_init();
     APP_ERROR_CHECK(err_code);
 }
-#endif
+
 
 static void initialize(void)
 {
@@ -736,8 +785,26 @@ static void initialize(void)
 
 #if BLE_DFU_SUPPORT_ENABLED
     ble_dfu_support_init();
-    power_management_init();
 #endif
+
+    power_management_init();
+    timers_init();
+    adc_configure();
+    twi_config();
+    // Initialize sensors.
+//    APP_ERROR_CHECK(nrf_twi_mngr_perform(&m_nrf_twi_mngr, NULL, sht3x_init_transfers,
+//        SHT3X_INIT_TRANSFER_COUNT, NULL));
+//    uint8_t address;
+//    uint8_t sample_data;
+//    ret_code_t err_code;
+//    for (address = 1; address <= 127; address++)
+//    {
+//        err_code = nrf_drv_twi_rx(&m_nrf_twi_mngr.twi, address, &sample_data, sizeof(sample_data));
+//        if (err_code == NRF_SUCCESS)
+//        {
+//            __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "TWI device detected at address 0x%x.", address);
+//        }
+//    }
 
     ble_stack_init();
     gap_params_init();
@@ -759,8 +826,6 @@ static void start(void)
     rtt_input_enable(rtt_input_handler, RTT_INPUT_POLL_PERIOD_MS);
 #endif
 
-    timers_init();
-    adc_configure();
 //    ERROR_CHECK(app_timer_create(&m_state_on_timer, APP_TIMER_MODE_SINGLE_SHOT,
 //                                 state_on_timer_handler));
 
