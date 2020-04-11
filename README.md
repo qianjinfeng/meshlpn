@@ -143,3 +143,6 @@ nrfjprog --family nrf52 --eraseall
 nrfjprog --family nrf52 --program latest_softdevice.hex
 nrfjprog --family nrf52 --program latest_bootloader.hex
 nrfutil pkg generate --debug-mode --application _build/ruuvi_firmware.hex --hw-version 3 --sd-req 0x91 --key-file ~/git/ruuvitag_fw/keys/ruuvi_open_private.pem ruuvi_firmware_dfu.zip
+
+<t:      13864>, mesh_app_utils.c,   65, Device UUID (raw): 01A87100002B2DF8A76393A43E020000
+<t:      13867>, mesh_app_utils.c,   70, Device UUID : 0071A801-2B00-F82D-A763-93A43E020000

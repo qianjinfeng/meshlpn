@@ -89,6 +89,14 @@
 
 /*lint -align_max(push) -align_max(1) */
 
+/** UUID  
+  * id 11053   0x00002b2d
+  * mac  f8a76393a43e
+  * device secret 33b1f7114d65642892547799c7cfbd62
+  * sha256（00002b2d,f8a76393a43e,33b1f7114d65642892547799c7cfbd62）= 193c86af3289836cf940317e58297f93285c89b92536bc891ab97e796ad15572
+**/
+
+
 /** Vendor specific company ID for Ali Wireless Button model */
 #define ALI_BUT_COMPANY_ID    0x01A8
 

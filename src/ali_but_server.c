@@ -42,6 +42,7 @@
 #include <stddef.h>
 
 #include "access.h"
+#include "access_config.h"
 #include "nrf_mesh_assert.h"
 #include "log.h"
 
@@ -116,7 +117,15 @@ uint32_t ali_but_server_init(ali_but_server_t * p_server, uint16_t element_index
     init_params.opcode_count = sizeof(m_opcode_handlers) / sizeof(m_opcode_handlers[0]);
     init_params.p_args = p_server;
     init_params.publish_timeout_cb = handle_publish_timeout;
-    return access_model_add(&init_params, &p_server->model_handle);
+  
+    uint32_t status = access_model_add(&init_params, &p_server->model_handle);
+
+    if (status == NRF_SUCCESS)
+    {
+        status = access_model_subscription_list_alloc(p_server->model_handle);
+    }
+
+    return status;
 }
 
 uint32_t ali_but_server_status_publish(ali_but_server_t * p_server, uint16_t value)

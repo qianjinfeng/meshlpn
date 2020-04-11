@@ -103,6 +103,13 @@
 #define STATIC_AUTH_DATA                {0x6E, 0x6F, 0x72, 0x64, 0x69, 0x63, 0x5F, 0x65, \
                                          0x78, 0x61, 0x6D, 0x70, 0x6C, 0x65, 0x5F, 0x31}
 
+/* aligenie Static OOB */
+#define STATIC_AUTH_DATA_ALI            {0x19, 0x3c, 0x86, 0xaf, 0x32, 0x89, 0x83, 0x6c, \
+                                         0xf9, 0x40, 0x31, 0x7e, 0x58, 0x29, 0x7f, 0x93} 
+
+#define UUID_ALI                        {0x01, 0xA8, 0x71, 0x00, 0x00, 0x2b, 0x2d, 0xf8, \
+                                         0xa7, 0x63, 0x93, 0xa4, 0x3e, 0x02, 0x00, 0x00}
+
 #define TWI_INSTANCE_ID             0
 #define MAX_PENDING_TRANSACTIONS    5
 NRF_TWI_MNGR_DEF(m_nrf_twi_mngr, MAX_PENDING_TRANSACTIONS, TWI_INSTANCE_ID);
@@ -192,6 +199,7 @@ static void provisioning_complete_cb(void)
     dsm_local_unicast_address_t node_address;
     dsm_local_unicast_addresses_get(&node_address);
     __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "Node Address: 0x%04x \n", node_address.address_start);
+
 
 #if SIMPLE_HAL_LEDS_ENABLED
     hal_led_blink_stop();
@@ -300,10 +308,21 @@ static void config_server_evt_cb(const config_server_evt_t * p_evt)
     {
       __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "----- Model app bind  -----\n");
       __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "----- 0x%04x\n", p_evt->params.model_app_bind.appkey_handle);
+
+
     }
     else if (p_evt->type == CONFIG_SERVER_EVT_APPKEY_ADD)
     {
       __LOG(LOG_SRC_APP, LOG_LEVEL_INFO, "----- app key add  -----\n");
+      dsm_handle_t app_key_handle = p_evt->params.appkey_add.appkey_handle;
+
+      ERROR_CHECK(access_model_application_bind(m_alibutton.model_handle, app_key_handle));
+      ERROR_CHECK(access_model_publish_application_set(m_alibutton.model_handle, app_key_handle));
+
+      /* Add the address to the DSM as a subscription address: */
+      dsm_handle_t pub_address_handle;
+      ERROR_CHECK(dsm_address_subscription_add(0xC001, &pub_address_handle));
+      ERROR_CHECK(access_model_subscription_add(m_alibutton.model_handle, pub_address_handle));
     }
     else if (p_evt->type == CONFIG_SERVER_EVT_MODEL_PUBLICATION_SET)
     {
@@ -731,11 +750,12 @@ static void timers_init(void)
 
 static void mesh_init(void)
 {
+    static const uint8_t static_uuid[NRF_MESH_KEY_SIZE] = UUID_ALI;
     mesh_stack_init_params_t init_params =
     {
         .core.irq_priority       = NRF_MESH_IRQ_PRIORITY_LOWEST,
         .core.lfclksrc           = DEV_BOARD_LF_CLK_CFG,
-        .core.p_uuid             = NULL,
+        .core.p_uuid             = static_uuid,
         .models.models_init_cb   = models_init_cb,
         .models.config_server_cb = config_server_evt_cb
     };
@@ -831,7 +851,7 @@ static void start(void)
 
     if (!m_device_provisioned)
     {
-        static const uint8_t static_auth_data[NRF_MESH_KEY_SIZE] = STATIC_AUTH_DATA;
+        static const uint8_t static_auth_data[NRF_MESH_KEY_SIZE] = STATIC_AUTH_DATA_ALI;
         mesh_provisionee_start_params_t prov_start_params =
         {
             .p_static_data    = static_auth_data,
